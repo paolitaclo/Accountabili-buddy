@@ -51,7 +51,7 @@ class CameraRoute extends Component {
         console.log(data);
         this.setState({ path: data.path })
         const file = {
-          uri: data.path,
+          uri: data,
           name: `${uuid.v1()}.jpg`,
           type: 'image/jpeg',
         };
