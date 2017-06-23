@@ -7,7 +7,9 @@ import {
   Image,
   Text,
   AsyncStorage,
-  KeyboardAvoidingView
+  KeyboardAvoidingView,
+  Platform,
+  PermissionsAndroid
 } from 'react-native';
 import { Input, Button, Card, CardSection } from '../components/common';
 import { connect } from 'react-redux';
@@ -35,22 +37,45 @@ class CameraRoute extends Component {
 
     this.state = {
       path: null,
-      User: null
+      User: null,
+      permissionsGranted: false
     };
   }
 
   componentDidMount() {
     AsyncStorage.getItem('User').then((value) => {
       this.setState({ 'User': JSON.parse(value) })
-    }).done()
+    }).done();
+
+    if (Platform.OS === 'android') {
+      PermissionsAndroid.requestMultiple([
+        PermissionsAndroid.PERMISSIONS.CAMERA,
+        PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE,
+        PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE
+      ])
+      .then(results => {
+        if (
+          (results[PermissionsAndroid.PERMISSIONS.CAMERA] === PermissionsAndroid.RESULTS.GRANTED) &&
+          (results[PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE] === PermissionsAndroid.RESULTS.GRANTED) &&
+          (results[PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE] === PermissionsAndroid.RESULTS.GRANTED)
+        ) {
+          console.log('GRANTED!!!!');
+          this.setState({ permissionsGranted: true });
+        }
+      }).catch(error => {
+        console.error(error);
+      });
+    }
   }
 
   takePicture() {
+    if (!this.state.permissionsGranted) return;
     this.camera.capture()
       .then((data) => {
+        console.log(data, '<<<<<< data');
         this.setState({ path: data.path })
         const file = {
-          uri: data,
+          uri: data.mediaUri,
           name: `${uuid.v1()}.jpg`,
           type: 'image/jpeg',
         };
@@ -63,15 +88,19 @@ class CameraRoute extends Component {
           secretKey: AWSSecretKey,
           successActionStatus: 201
         };
+        console.log('>>>>Key', AWSAccessKeyId);
 
         RNS3.put(file, options).then(response => {
+          console.log('*** BODY ***', response.body);
+          console.log('status code:::: ', response.status);
+          console.log('error code: ', response.code, response.errorCode);
           if (response.status !== 201) {
             throw new Error('Failed to upload image to S3', response);
           }
           this.props.pictureTaken(response.body.postResponse.location)
-        }).catch(err => console.error('Camera error not uploaded: ', err))
+        }).catch(err => console.log('our INSIDE catch: ', err))
       })
-      .catch(err => console.error(err));
+      .catch(err => console.error("our OUTSIDE CATCH: ", err));
   }
 
   renderCamera() {
@@ -129,28 +158,19 @@ class CameraRoute extends Component {
           style={styles.preview}
         >
 
-        <View style={styles.cancelContainer}>
-          <Button
-            textStyleOverRide={styles.textStyleOverRide}
-            style={styles.cancelButton}
-            whenPressed={() => this.setState({ path: null })}>
-            x
-          </Button>
-        </View>
-
         <View style={styles.inputs}>
-          <CardSection style={styles.inputCardSections}>
+
+          <CardSection style={{ backgroundColor: 'transparent' }}>
             <Input
-              textStyle = {styles.inputTextStyle}
               placeholder="rep count"
               autoCapitalize={'none'}
               onChangeText={this.onRepsChange.bind(this)}
               keyboardType={'numeric'}
               label='Reps' />
           </CardSection>
-          <CardSection style={styles.inputCardSections}>
+
+          <CardSection style={{ backgroundColor: 'transparent' }}>
             <Input
-              textStyle = {styles.inputTextStyle}
               placeholder='caption'
               autoCapitalize={'none'}
               onChangeText={this.onCaptionChange.bind(this)}
@@ -159,9 +179,10 @@ class CameraRoute extends Component {
               maxLength={60}
               label='Caption' />
           </CardSection>
-          <CardSection style={styles.inputCardSections}>
+
+          <CardSection style={{ backgroundColor: 'transparent' }}>
+
             <Input
-              textStyle = {styles.inputTextStyle}
               label="tag friends"
               onChangeText={this.onTagFriendsChange.bind(this)}
               autoCapitalize={'none'}
@@ -169,6 +190,14 @@ class CameraRoute extends Component {
           </CardSection>
         </View>
 
+        <View style={styles.cancelContainer}>
+          <Button
+            textStyleOverRide={styles.textStyleOverRide}
+            style={styles.cancelButton}
+            whenPressed={() => this.setState({ path: null })}>
+            x
+          </Button>
+        </View>
         <View style={styles.btnContainer}>
             <Button
               whenPressed={() => this.onPictureSubmit()}
@@ -193,11 +222,9 @@ class CameraRoute extends Component {
 
 const lightPurple = '#D961FF';
 const transparentWhite = 'rgba(255, 255, 255, 0.5)';
-const semiOpacityWhite = 'rgba(255, 255, 255, 0.8)';
 const darkPurple = 'rgba(127, 13, 205, 0.58)';
 const darkerPurple = 'rgba(127, 13, 205, 0.98)'
 const brightWhite = 'rgba(255, 255, 255, 0.99)';
-const transparent = 'transparent';
 
 const styles = StyleSheet.create({
   container: {
@@ -218,8 +245,8 @@ const styles = StyleSheet.create({
     height: 70,
     borderRadius: 35,
     borderWidth: 5,
-    borderColor: semiOpacityWhite,
-    marginBottom: 30,
+    borderColor: '#FFF',
+    marginBottom: 15,
   },
   renderImage: {
     position: 'absolute',
@@ -227,32 +254,26 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
     justifyContent: 'flex-end'
   },
-  inputCardSections: {
-    backgroundColor: transparent
-  },
   inputs: {
     position: 'absolute',
     alignItems: 'center',
     flexDirection: 'column',
     width: 300,
     height: 200,
-    backgroundColor: transparent,
+    backgroundColor: 'transparent',
     bottom: 50
-  },
-  inputTextStyle: {
-    fontWeight: '600'
   },
   btnContainer: {
     position: 'absolute',
     right: 5,
     bottom: 20,
-    backgroundColor: transparent,
+    backgroundColor: 'transparent',
   },
   cancelContainer: {
     position: 'absolute',
     right: -5,
     top: 10,
-    backgroundColor: transparent,
+    backgroundColor: 'transparent',
   },
   textStyleOverRide: {
     color: brightWhite,
@@ -269,8 +290,8 @@ const styles = StyleSheet.create({
     flex: null
   },
   cancelButton: {
-    backgroundColor: transparent,
-    borderColor: transparent,
+    backgroundColor: 'transparent',
+    borderColor: 'transparent',
     height: 45,
     width: 45,
     flex: null
